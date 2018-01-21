@@ -1,3 +1,3 @@
-# Statistical_Learning_Using_R
+# Statistical_Learning
 
 R codes and reports for Statistical Learning.
