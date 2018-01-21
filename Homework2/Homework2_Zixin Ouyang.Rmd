@@ -1,0 +1,113 @@
+---
+title: "HW02"
+author: "Zixin Ouyang"
+date: "9/22/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+hw02_train<-read.csv('hw02-train-data.csv')
+hw02_test<-read.csv('hw02-test-data.csv')
+```
+
+## Exercise 1
+```{r}
+fit_poly = function(degree = 1, data) {
+lm(y ~ poly(x, degree = degree), data = data)
+}
+```
+
+```{r}
+rmse = function(actual, predicted) {
+  sqrt(mean((actual - predicted) ^ 2))
+}
+```
+
+```{r}
+get_rmse = function(model, data, response) {
+  rmse(actual = data[, response], 
+       predicted = predict(model, data))
+}
+```
+
+```{r}
+degrees = 1:20
+model = lapply(degrees, fit_poly, data = hw02_train)
+```
+
+
+```{r}
+trn_rmse = sapply(model, get_rmse, data = hw02_train, response = "y")
+tst_rmse = sapply(model, get_rmse, data = hw02_test, response = "y")
+```
+
+```{r}
+plot(degrees, trn_rmse, type = "b", 
+     ylim = c(min(c(trn_rmse, tst_rmse)) - 0.02, 
+              max(c(trn_rmse, tst_rmse)) + 0.02), 
+     col = "dodgerblue", 
+     xlab = "Polynomial Degree",
+     ylab = "RMSE",
+     main = "Test and Train RMSE for Polynomial Models of Various Degrees")
+lines(degrees, tst_rmse, type = "b", col = "darkorange")
+legend("bottomleft", c("Train", "Test"), lty = c(1, 2),
+       col = c("dodgerblue", "darkorange"))
+```
+
+```{r}
+which.min(tst_rmse)
+```
+
+The model with degree of polynomial equal to 5 has lowest test RMSE, so it performs the best. Underfitting models: models with degree of polynomial less than 5. Overfitting models: models with degree of polynomial larger than 5.
+
+## Exercise 2
+```{r}
+library(FNN)
+k = seq(5, 50, by = 5)
+```
+
+```{r}
+make_knn_pred = function(k = 1, training, predicting) {
+  pred = FNN::knn.reg(train = training["x"], 
+                      test = predicting["x"], 
+                      y = training$y, k = k)$pred
+  act  = predicting$y
+  rmse(predicted = pred, actual = act)
+}
+```
+
+```{r}
+knn_trn_rmse = sapply(k, make_knn_pred, 
+                      training = hw02_train, 
+                      predicting = hw02_train)
+```
+
+```{r}
+knn_tst_rmse = sapply(k, make_knn_pred, 
+                      training = hw02_train, 
+                      predicting = hw02_test)
+```
+
+```{r}
+best_k = k[which.min(knn_tst_rmse)]
+```
+
+```{r}
+fit_status = ifelse(k < best_k, "Over", ifelse(k == best_k, "Best", "Under"))
+```
+
+```{r}
+knn_results = data.frame(
+  k,
+  round(knn_trn_rmse, 2),
+  round(knn_tst_rmse, 2),
+  fit_status)
+colnames(knn_results) = c("K", "Train RMSE", "Test RMSE", "Fitting")
+```
+
+```{r}
+knitr::kable(knn_results)
+```
+
