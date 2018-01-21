@@ -1,0 +1,132 @@
+---
+title: "Homework 01"
+author: "Zixin Ouyang"
+output:
+  pdf_document:
+    toc: no
+  html_document:
+    toc: no
+---
+
+## Exercise 1
+```{r }
+hw01_data<-read.csv('hw01-data.csv')
+set.seed(42)
+train_index = sample(1:nrow(hw01_data), size = round(0.5 * nrow(hw01_data)))
+train_data = hw01_data[train_index, ]
+test_data = hw01_data[-train_index, ]
+```
+
+```{r}
+rmse = function(actual, predicted) {
+  sqrt(mean((actual - predicted) ^ 2))
+}
+
+```
+
+```{r}
+get_rmse = function(model, data, response) {
+  rmse(actual = data[, response], 
+       predicted = predict(model, data))
+}
+```
+
+```{r}
+get_complexity = function(model) {
+  length(coef(model))
+}
+```
+
+```{r}
+mod_1<-lm(y~., data=train_data)
+mod_2<-lm(y~. + I(a ^ 2) + I(b ^ 2) + I(c ^ 2), data=train_data)
+mod_3<-lm(y~. ^ 2 + I(a ^ 2) + I(b ^ 2) + I(c ^ 2), data=train_data)
+mod_4<-lm(y~a * b * c * d + I(a ^ 2) + I(b ^ 2) + I(c ^ 2), data=train_data)
+```
+
+```{r}
+predicted = predict(mod_1, data=train_dat)
+```
+
+
+```{r}
+model_list = list(mod_1, mod_2, mod_3, mod_4)
+
+trn_rmse = sapply(model_list, get_rmse, data = train_data, response = "y")
+tst_rmse = sapply(model_list, get_rmse, data = test_data, response = "y")
+model_complexity = sapply(model_list, get_complexity)
+```
+
+| Model   | Train RMSE      | Test RMSE       | Predictors              |
+|---------|-----------------|-----------------|-------------------------|
+| `mod_1` | `r trn_rmse[1]` | `r tst_rmse[1]` | `r model_complexity[1]` |
+| `mod_2` | `r trn_rmse[2]` | `r tst_rmse[2]` | `r model_complexity[2]` |
+| `mod_3` | `r trn_rmse[3]` | `r tst_rmse[3]` | `r model_complexity[3]` |
+| `mod_4` | `r trn_rmse[4]` | `r tst_rmse[4]` | `r model_complexity[4]` |
+
+Based on these results, Model 3 is the best model for prediction.
+
+## Exercise 2
+```{r}
+library(tibble)
+library(readr)
+library(MASS)
+data(Boston)
+Boston = as_tibble(Boston)
+```
+
+```{r}
+set.seed(42)
+boston_index = sample(1:nrow(Boston), size = 400)
+train_boston = Boston[boston_index, ]
+test_boston  = Boston[-boston_index, ]
+```
+
+```{r}
+fit = lm(medv ~ . ^ 2, data = train_boston)
+fit_smaller<-lm(medv ~ ., data = train_boston)
+fit_larger<-lm(medv ~ . ^ 2 + crim:zn:rm, data = train_boston)
+```
+
+```{r}
+models = list(fit_smaller, fit, fit_larger)
+
+train_rmse = sapply(models, get_rmse, data = train_boston, response = "medv")
+test_rmse = sapply(models, get_rmse, data = test_boston, response = "medv")
+nparameters = sapply(models, get_complexity)
+```
+
+| Model         | Train RMSE        | Test RMSE        | Predictors         |
+|---------------|-------------------|------------------|--------------------|
+| `fit_smaller` | `r train_rmse[1]` | `r test_rmse[1]` | `r nparameters[1]` |
+| `fit`         | `r train_rmse[2]` | `r test_rmse[2]` | `r nparameters[2]` |
+| `fit_larger`  | `r train_rmse[3]` | `r test_rmse[3]` | `r nparameters[3]` |
+
+## Exercise 3
+```{r}
+newtrain1=train_boston[abs(rstandard(fit)) <= 2,]
+newtrain2=train_boston[abs(rstandard(fit)) <= 3,]
+```
+
+```{r}
+fit_2=lm(medv ~ . ^ 2, data = newtrain1)
+fit_3=lm(medv ~ . ^ 2, data = newtrain2)
+```
+
+```{r}
+model_ = list(fit,fit_2, fit_3)
+
+rmse_tests = sapply(model_, get_rmse, data = test_boston, response = "medv")
+```
+| Model     |  Test RMSE        | # Obs removed             |
+|-----------|-------------------|---------------------------|
+| `fit`     | `r rmse_tests[1]` |        0                  |
+| `fit_2`   | `r rmse_tests[2]` | `r 400-dim(newtrain1)[1]` |
+| `fit_3`   | `r rmse_tests[3]` | `r 400-dim(newtrain2)[1]` |
+
+Model that removes observations from the training data with absolute standardized residuals greater than 2 performs the best, it removes largest amount of observations. So modifying training data is justified.
+
+```{r}
+newdata=tibble(crim=0.02763, zn=75.0, indus=3.95, chas=0, nox=0.4280,	rm=6.595,	age=22.8,	dis=5.4011,	rad=3,	tax=252,	ptratio=19.3,	black=395.63,	lstat=4.32)
+predict(fit_2, newdata, interval = "prediction", level = 0.99)
+```
