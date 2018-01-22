@@ -1,0 +1,131 @@
+---
+title: "HW06"
+author: "Zixin Ouyang"
+date: "10/26/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+```{r}
+wisc_train<-read.csv('wisc-trn.csv')
+wisc_test<-read.csv('wisc-tst.csv')
+```
+
+```{r}
+library(caret)
+```
+
+## Exercise 1
+```{r}
+set.seed(1337)
+knn_mod = train(
+  class ~ .,
+  data = wisc_train,
+  method = "knn",
+  trControl = trainControl(method = "cv", number = 5),
+  tuneGrid = expand.grid(k = seq(1, 101, by = 2))
+)
+```
+
+```{r}
+plot(knn_mod)
+```
+
+## Exercise 2
+```{r}
+set.seed(1337)
+knn_mod2 = train(
+  class ~ .,
+  data = wisc_train,
+  method = "knn",
+  trControl = trainControl(method = "cv", number = 5),
+  preProcess = c("center", "scale"),
+  tuneGrid = expand.grid(k = seq(1, 101, by = 2))
+)
+```
+
+```{r}
+plot(knn_mod2)
+```
+
+## Exercise 3
+```{r, message=FALSE, warning=FALSE}
+library(randomForest)
+```
+
+```{r}
+set.seed(1337)
+rf_mod = train(
+  class ~ .,
+  data = wisc_train,
+  method = "rf",
+  trControl = trainControl(method = "cv", number = 5),
+  tuneGrid = expand.grid(mtry = seq(1, 10, by = 1))
+)
+```
+
+| mtry  |       Accuracy          | 
+|-------|-------------------------|
+| `1`   | `r rf_mod$result[1,2]`  | 
+| `2`   | `r rf_mod$result[2,2]`  |
+| `3`   | `r rf_mod$result[3,2]`  |
+| `4`   | `r rf_mod$result[4,2]`  |
+| `5`   | `r rf_mod$result[5,2]`  |
+| `6`   | `r rf_mod$result[6,2]`  |
+| `7`   | `r rf_mod$result[7,2]`  |
+| `8`   | `r rf_mod$result[8,2]`  |
+| `9`   | `r rf_mod$result[9,2]`  |
+| `10`  | `r rf_mod$result[10,2]` |
+
+## Exercise 4
+```{r}
+get_best_result = function(caret_fit) {
+  best = which(rownames(caret_fit$results) == rownames(caret_fit$bestTune))
+  best_result = caret_fit$results[best, ]
+  rownames(best_result) = NULL
+  best_result
+}
+```
+
+```{r}
+test_pred1 = predict(knn_mod, newdata = wisc_test)
+```
+
+```{r}
+test_pred2 = predict(knn_mod2, newdata = wisc_test)
+```
+
+```{r}
+prob = predict(rf_mod, newdata = wisc_test, type = "prob")[10, 2]
+```
+
+```{r}
+test_pred3 = predict(rf_mod, newdata = wisc_test)
+result = confusionMatrix(test_pred3, wisc_test$class, positive = "M")
+```
+
+```{r}
+calc_acc = function(actual, predicted) {
+  mean(actual == predicted)
+}
+```
+
+```{r}
+calc_acc(actual = wisc_test$class, predicted = test_pred3)
+```
+
+| Question |                            Answer                             | 
+|----------|-------------------------------------------------------------- |
+|  `(a)`   | `r get_best_result(knn_mod)$k`                                |
+|  `(b)`   | `r get_best_result(knn_mod)$Accuracy`                         |
+|  `(c)`   | `r calc_acc(actual = wisc_test$class, predicted = test_pred1)`|
+|  `(d)`   | `r get_best_result(knn_mod2)$k`                               |
+|  `(e)`   | `r get_best_result(knn_mod2)$Accuracy`                        |
+|  `(f)`   | `r calc_acc(actual = wisc_test$class, predicted = test_pred2)`|
+|  `(g)`   | `KNN is performing better with predictor scaling `            |
+|  `(h)`   | `r get_best_result(rf_mod)$mtry`                              |
+|  `(i)`   | `r prob`                                                      |        
+|  `(j)`   | `r result$byClass['Sensitivity']`                             |
+|  `(k)`   | `r result$byClass['Specificity'] `                            |
+|  `(l)`   | `the random forest is performing better`                      |
