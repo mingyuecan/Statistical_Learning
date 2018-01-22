@@ -1,0 +1,193 @@
+---
+title: "HW04"
+author: "Zixin Ouyang"
+date: "10/6/2017"
+output: pdf_document
+---
+
+### Exercise 1
+```{r}
+hw04_train<-read.csv('hw04-trn-data.csv')
+hw04_test<-read.csv('hw04-tst-data.csv')
+```
+
+```{r, message=FALSE, warning=FALSE}
+library(caret)
+```
+
+```{r}
+c1 = function(data) {
+  with(data, ifelse(x1 > 0, yes = "dodgerblue", no = "darkorange"))
+}
+```
+
+```{r}
+c2 = function(data) {
+  with(data, ifelse(x2 > x1 + 1, yes = "dodgerblue", no = "darkorange"))
+}
+```
+
+```{r}
+c3 = function(data) {
+  with(data, ifelse(x2 > x1 + 1,
+                    yes = "dodgerblue",
+                    no = ifelse(x2 < x1 - 1,
+                                yes = "dodgerblue",
+                                no = "darkorange")))
+}
+```
+
+```{r}
+c4 = function(data) {
+  with(data, ifelse(x2 > (x1 + 1) ^ 2,
+                    yes = "dodgerblue",
+                    no = ifelse(x2 < -(x1 - 1) ^ 2,
+                                yes = "dodgerblue",
+                                no = "darkorange")))
+}
+```
+
+```{r}
+calc_error = function(classifier, data) {
+  mean(data$y != classifier(data))
+}
+```
+
+```{r}
+classifiers = list(c1, c2, c3, c4)
+```
+
+```{r}
+results = data.frame(
+  c("`c1`", "`c2`", "`c3`", "`c4`"),
+  sapply(classifiers, calc_error, data = hw04_train),
+  sapply(classifiers, calc_error, data = hw04_test)
+)
+```
+
+```{r}
+colnames(results) = c("Classifier", "Train Error Rate", "Test Error Rate")
+knitr::kable(results)
+```
+
+### Exercise 2
+
+```{r}
+get_logistic_error = function(model, data) {
+  predicted = ifelse(predict(model, data) > 0.5,
+                     yes = "dodgerblue",
+                     no = "darkorange")
+  mean(data$y != predicted)
+}
+```
+
+```{r}
+model_1 = glm(y ~ 1, data = hw04_train, family = "binomial")
+model_2 = glm(y ~ x1 + x2, data = hw04_train, family = "binomial")
+model_3 = glm(y ~ x1 + x2 + I(x1 ^ 2) + I(x2 ^ 2), data = hw04_train, family = "binomial")
+model_4 = glm(y ~  x1 * x2 + I(x1 ^ 2) + I(x2 ^ 2), data = hw04_train, family = "binomial")
+```
+
+```{r}
+model_list = list(model_1, model_2, model_3, model_4)
+train_errors = sapply(model_list, get_logistic_error, data = hw04_train)
+test_errors  = sapply(model_list, get_logistic_error, data = hw04_test)
+```
+
+| Models   |  Train Error Rate   |  Test Error Rate      | 
+|----------|---------------------|-----------------------|
+| `mod_1`  | `r train_errors[1]` |   `r test_errors[1] ` |
+| `mod_2`  | `r train_errors[2]` |   `r test_errors[2] ` |
+| `mod_3`  | `r train_errors[3]` |   `r test_errors[3] ` |
+| `mod_4`  | `r train_errors[4]` |   `r test_errors[4] ` |
+
+### Exercise 3
+
+```{r}
+make_sim_data = function(n_obs = 25) {
+  x1 = runif(n = n_obs, min = 0, max = 2)
+  x2 = runif(n = n_obs, min = 0, max = 4)
+  prob = exp(1 + 2 * x1 - 1 * x2) / (1 + exp(1 + 2 * x1 - 1 * x2))
+  y = rbinom(n = n_obs, size = 1, prob = prob)
+  data.frame(y, x1, x2)
+}
+```
+
+```{r}
+set.seed(659017838)
+n_sims = 1000
+n_models = 3
+x = data.frame(x1=1, x2=1)
+predictions = matrix(0, nrow = n_sims, ncol = n_models)
+```
+
+```{r, message=FALSE, warning=FALSE}
+for(sim in 1:n_sims) {
+  sim_data = make_sim_data()
+  mod_1 = glm(y ~ 1, data = sim_data, family = "binomial")
+  mod_2 = glm(y ~ ., data = sim_data, family = "binomial")
+  mod_3 = glm(y ~ x1*x2 + I(x1 ^ 2) + I(x2 ^ 2), data = sim_data, family = "binomial")
+  
+  predictions[sim, 1] = predict(mod_1, newdata=x , type = "response")
+  predictions[sim, 2] = predict(mod_2, newdata=x, type = "response")
+  predictions[sim, 3] = predict(mod_3, newdata=x, type = "response")
+}
+```
+
+```{r}
+get_mse = function(truth, estimate) {
+  mean((estimate - truth) ^ 2)
+}
+```
+
+```{r}
+get_bias = function(estimate, truth) {
+  mean(estimate) - truth
+}
+```
+
+```{r}
+get_var = function(estimate) {
+  mean((estimate - mean(estimate)) ^ 2)
+}
+```
+
+```{r}
+p = function(x) {
+with(x,
+     exp(1 + 2 * x1 - 1 * x2) / (1 + exp(1 + 2 * x1 - 1 * x2))
+     )
+}
+```
+
+```{r}
+bias = apply(predictions, 2, get_bias, truth = p(x))
+variance = apply(predictions, 2, get_var)
+mse = apply(predictions, 2, get_mse, truth = p(x))
+```
+
+```{r, echo = FALSE, asis = TRUE}
+results = data.frame(
+  models = c("Intercept Only", "Additive", "Second Order"),
+  round(mse, 5),
+  round(bias ^ 2, 5),
+  round(variance, 5)
+)
+colnames(results) = c("K", "Mean Squared Error", "Bias Squared", "Variance")
+rownames(results) = NULL
+knitr::kable(results, booktabs = TRUE, escape = TRUE)
+```
+
+### Exercise 4
+(a) The true decision boundaries are non-linear since the fourth classifier performs best.
+
+(b) Model 4 performs best because it has smallest train and test error rates.
+
+(c) The first three models are underfitting as they are all simpler than the “best” model.
+
+(d) None of these models are overfitting as the “best” model is also the most complex.
+
+(e) Both the additive and second order models are performing unbiased estimation.
+
+(f) The additive model performs best because it has the lowest MSE.
+
