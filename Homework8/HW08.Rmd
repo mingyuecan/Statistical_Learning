@@ -1,0 +1,246 @@
+---
+title: "HW08"
+author: "Zixin Ouyang"
+date: "11/6/2017"
+output:
+  html_document: default
+  pdf_document: default
+---
+## Exericse 1
+```{r message=FALSE, warning=FALSE}
+library(readr)
+leukemia = read_csv("/Users/Constance/Downloads/leukemia.csv", progress = FALSE)
+```
+
+```{r}
+y = as.factor(leukemia$class)
+X = as.matrix(leukemia[, -1])
+```
+
+```{r}
+library(glmnet)
+```
+
+```{r}
+fit_lasso = glmnet(X, y, alpha = 1, family="binomial")
+fit_ridge = glmnet(X, y, alpha = 0, family="binomial")
+```
+
+```{r}
+par(mfrow = c(1, 2))
+plot(fit_lasso, xvar = "lambda", main = "Lasso")
+plot(fit_ridge, xvar = "lambda", main = "Ridge")
+```
+
+```{r}
+fit_cv = cv.glmnet(X, y, family = "binomial", alpha = 1)
+```
+
+```{r}
+plot(fit_cv)
+```
+
+```{r}
+library(caret)
+cv_5 = trainControl(method = "cv", number = 5)
+lasso_grid = expand.grid(alpha = 1, 
+                         lambda = c(fit_cv$lambda.min, 
+                                    fit_cv$lambda.1se))
+```
+
+```{r}
+set.seed(659017838)
+fit_lasso = train(X, y,
+  method = "glmnet",
+  trControl = cv_5,
+  tuneGrid = lasso_grid
+)
+```
+
+```{r}
+lasso_accuracies = fit_lasso$results$Accuracy
+```
+
+```{r}
+fit_cv2 = cv.glmnet(X, y, family = "binomial", alpha = 0)
+```
+
+```{r}
+plot(fit_cv2)
+```
+
+```{r}
+ridge_grid = expand.grid(alpha = 0, 
+                         lambda = c(fit_cv2$lambda.min, fit_cv2$lambda.1se))
+```
+
+```{r}
+set.seed(659017838)
+fit_ridge = train(X, y,
+  method = "glmnet",
+  trControl = cv_5,
+  tuneGrid = ridge_grid
+)
+```
+
+```{r}
+ridge_accuracies = fit_ridge$results$Accuracy
+```
+
+```{r}
+set.seed(659017838)
+fit_knn = train(X, y,
+  method = "knn",
+  trControl = cv_5,
+  preProcess = c("center", "scale")
+)
+```
+
+```{r}
+knn_accuracies = fit_knn$results$Accuracy
+```
+
+|    Model     |  Cross-Validated Accuracy   |          Standard Deviation         | 
+|--------------|---------------------------- |-------------------------------------|
+| `fit_lasso`  | `r lasso_accuracies[1]`     | `r fit_lasso$results$AccuracySD[1]` |
+| `fit_lasso`  | `r lasso_accuracies[2]`     | `r fit_lasso$results$AccuracyS[2]`  |
+| `fit_ridge`  | `r ridge_accuracies[1]`     | `r fit_ridge$results$AccuracySD[1]` |
+| `fit_ridge`  | `r ridge_accuracies[2]`     | `r fit_ridge$results$AccuracySD[2]` |
+| `fit_knn`    | `r knn_accuracies[1]`       | `r fit_knn$results$AccuracySD[1]`   |
+| `fit_knn`    | `r knn_accuracies[2]`       | `r fit_knn$results$AccuracySD[2]`   |
+| `fit_knn`    | `r knn_accuracies[3]`       | `r fit_knn$results$AccuracySD[3]`   |
+
+## Exercise 2
+```{r}
+set.seed(42)
+library(caret)
+library(ISLR)
+index = createDataPartition(College$Outstate, p = 0.75, list = FALSE)
+college_trn = College[index, ]
+college_tst = College[-index, ]
+```
+
+```{r}
+set.seed(659017838)
+linear_mod = train(
+  Outstate ~ .,
+  data = college_trn,
+  method = "lm",
+  trControl = trainControl(method = "cv", number = 5)
+)
+```
+
+```{r}
+set.seed(659017838)
+elnet1 = train(
+  Outstate ~ . , 
+  data = college_trn,
+  method = "glmnet",
+  trControl = cv_5,
+  tuneLength = 10
+)
+```
+
+```{r}
+set.seed(659017838)
+elnet2 = train(
+  Outstate ~ .^2 , 
+  data = college_trn,
+  method = "glmnet",
+  trControl = cv_5,
+  tuneLength = 10
+)
+```
+
+```{r}
+set.seed(659017838)
+knn_mod = train(
+  Outstate ~ .,
+  data = college_trn,
+  method = "knn",
+  trControl = trainControl(method = "cv", number = 5),
+  preProcess = c("center", "scale")
+)
+```
+
+```{r}
+set.seed(659017838)
+knn_mod2 = train(
+  Outstate ~ .^2,
+  data = college_trn,
+  method = "knn",
+  trControl = trainControl(method = "cv", number = 5),
+  preProcess = c("center", "scale")
+)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(randomForest)
+set.seed(659017838)
+rf_mod = train(
+  Outstate ~ .,
+  data = college_trn,
+  method = "rf",
+  trControl = trainControl(method = "cv", number = 5)
+)
+```
+
+```{r}
+get_best_result = function(caret_fit) {
+  best = which(rownames(caret_fit$results) == rownames(caret_fit$bestTune))
+  best_result = caret_fit$results[best, ]
+  rownames(best_result) = NULL
+  best_result
+}
+```
+
+```{r}
+models = list(linear_mod, elnet1, elnet2, knn_mod, knn_mod2, rf_mod)
+```
+
+```{r}
+rmse = function(actual, predicted) {
+  sqrt(mean((actual - predicted) ^ 2))
+}
+```
+
+```{r}
+get_rmse = function(model, data, response) {
+  rmse(actual = data[, response], 
+       predicted = predict(model, data))
+}
+```
+
+```{r}
+test_rmse = sapply(models, get_rmse, data = college_tst, response = "Outstate")
+```
+
+|    Model     |         Cross-Validated RMSE        |     Test RMSE    | 
+|--------------|-------------------------------------|------------------|
+| `linear_mod` | `r get_best_result(linear_mod)$RMSE`| `r test_rmse[1]` |
+| `elnet1`     | `r get_best_result(elnet1)$RMSE`    | `r test_rmse[2]` |
+| `elnet2`     | `r get_best_result(elnet2)$RMSE`    | `r test_rmse[3]` |
+| `knn_mod`    | `r get_best_result(knn_mod)$RMSE`   | `r test_rmse[4]` |
+| `knn_mod2`   | `r get_best_result(knn_mod2)$RMSE`  | `r test_rmse[5]` |
+| `rf_mod`     | `r get_best_result(rf_mod)$RMSE`    | `r test_rmse[6]` |
+
+## Exercise 3
+```{r}
+uiuc_outstate = College[rownames(College)=="University of Illinois - Urbana",'Outstate']
+```
+
+|Question|                                               Answer                                                       | 
+|--------|------------------------------------------------------------------------------------------------------------|
+|  (a)   | `r dim(X)[1]` observations are in the dataset, and `r dim(X)[2]` predictors are in the dataset.            |
+|  (b)   |  Yes. We see a nice U-shaped CV error curve                                                                |
+|  (c)   |  No. This plot suggests that if we were to try smaller lambda, we could achieve a lower devience (error).  |
+|  (d)   |  KNN performs worse. This is expected in a high-dimensional setting due to the curse of dimensionality.    |
+|  (e)   |  The model with a ridge penalty should be choicen because it has the largest accuracy.                     |
+|  (f)   |  I prefer the random forest model because it has the smallest cross-validated RMSE and test RMSE.          |
+|  (g)   |  The first elastic net model: alpha: `r elnet1$bestTune[1] `, lambda: `r elnet1$bestTune[2]` 
+|        |  The second elastic net model: alpha: `r elnet2$bestTune[1] `, lambda: `r elnet2$bestTune[2]`              
+|        |  Both have an alpha value of 0.1, so are in-between, but are closer to ridge.                              |
+|  (h)   |  Yes. Yes. A lower error is found using scaled predictors.                                                 |
+|  (i)   |  Without interactions seems to work better. Adding all the interactions creates a high dimensional dataset.|
+|  (j)   | The dataset is from year 1995, and the out-of-state tuition at UIUC at that time was `r uiuc_outstate `.   |                              
+
