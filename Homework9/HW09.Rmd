@@ -1,0 +1,270 @@
+---
+title: "HW09"
+author: "Zixin Ouyang"
+date: "11/19/2017"
+output:
+  pdf_document: default
+  html_document: default
+---
+
+## Exercise 1
+```{r}
+library(mlbench)
+set.seed(42)
+sim_trn = mlbench.spirals(n = 2500, cycles = 1.5, sd = 0.125)
+sim_trn = data.frame(sim_trn$x, class = as.factor(sim_trn$classes))
+sim_tst = mlbench.spirals(n = 10000, cycles = 1.5, sd = 0.125)
+sim_tst = data.frame(sim_tst$x, class = as.factor(sim_tst$classes))
+```
+
+```{r}
+uin = 659017838
+set.seed(uin)
+```
+
+```{r message=FALSE, warning=FALSE}
+library(caret)
+cv_5 = trainControl(method = "cv", number = 5)
+```
+
+```{r}
+glm_cv_time = system.time({
+  sim_glm_cv  = train(
+    class ~ .,
+    data = sim_trn,
+    trControl = cv_5,
+    method = "glm")
+})
+
+tree_cv_time = system.time({
+  sim_tree_cv = train(
+    class ~ .,
+    data = sim_trn,
+    trControl = cv_5,
+    method = "rpart")
+})
+```
+
+```{r}
+library(rpart.plot)
+rpart.plot(sim_tree_cv$finalModel)
+```
+
+```{r}
+rf_grid = expand.grid(mtry = c(1, 2))
+```
+
+```{r message=FALSE, warning=FALSE}
+library(randomForest)
+```
+
+```{r}
+rf_cv_time = system.time({
+  sim_rf_cv  = train(
+    class ~ .,
+    data = sim_trn,
+    trControl = cv_5,
+      method = "rf",
+    tuneGrid=rf_grid)
+})
+```
+
+```{r}
+rf_oob_time = system.time({
+  sim_rf_oob  = train(
+    class ~ .,
+    data = sim_trn,
+    trControl = trainControl(method = "oob"),
+    method = "rf",
+    tuneGrid=rf_grid)
+})
+```
+
+```{r}
+best_tune = c(NA, sim_tree_cv$bestTune$cp, sim_rf_oob$bestTune$mtry, sim_rf_cv$bestTune$mtry)
+```
+
+```{r}
+resampled_acc = c(max(sim_glm_cv$results$Accuracy),
+                  max(sim_tree_cv$results$Accuracy),
+                  max(sim_rf_cv$results$Accuracy),
+                  max(sim_rf_oob$results$Accuracy))
+```
+
+```{r}
+calc_acc = function(actual, predicted) {
+  mean(actual == predicted)
+}
+```
+
+```{r}
+glm_cv_tst_acc = calc_acc(predicted = predict(sim_glm_cv, sim_tst),
+                          actual    = sim_tst$class)
+
+tree_cv_tst_acc = calc_acc(predicted = predict(sim_tree_cv, sim_tst),
+                           actual    = sim_tst$class)
+
+rf_cv_tst_acc = calc_acc(predicted = predict(sim_rf_cv, sim_tst),
+                         actual    = sim_tst$class)
+
+rf_oob_tst_acc = calc_acc(predicted = predict(sim_rf_oob, sim_tst),
+                          actual    = sim_tst$class)
+
+test_acc = c(glm_cv_tst_acc, tree_cv_tst_acc, rf_cv_tst_acc, rf_oob_tst_acc)
+```
+
+|       Model     |    Chosen tuning parameter    |    Elapsed tuning time      | Resampled Accuracy  |  Test Accuracy  |
+|-----------------|-------------------------------|-----------------------------|---------------------|-----------------|
+| Logistic with CV|   `r sim_glm_cv$bestTune`     | `r glm_cv_time["elapsed"] ` |`r resampled_acc[1] `| `r test_acc[1]` |
+| Tree with CV    |   `r sim_tree_cv$bestTune`    | `r tree_cv_time["elapsed"]` |`r resampled_acc[2] `| `r test_acc[2]` |
+| RF with CV      |   `r sim_rf_cv$bestTune`      | `r rf_cv_time["elapsed"]  ` |`r resampled_acc[3] `| `r test_acc[3]` |
+| RF with OOB     |   `r sim_rf_oob$bestTune`     | `r rf_oob_time["elapsed"] ` |`r resampled_acc[4] `| `r test_acc[4]` |
+
+
+## Exercise 2
+```{r}
+library(ISLR)
+Hitters = na.omit(Hitters)
+```
+
+```{r}
+uin = 659017838
+set.seed(uin)
+hit_idx = createDataPartition(Hitters$Salary, p = 0.6, list = FALSE)
+hit_trn = Hitters[hit_idx,]
+hit_tst = Hitters[-hit_idx,]
+```
+
+```{r}
+gbm_grid = expand.grid(interaction.depth = c(1, 2),
+                       n.trees = c(500, 1000, 1500),
+                       shrinkage = c(0.001, 0.01, 0.1),
+                       n.minobsinnode = 10)
+```
+
+```{r message=FALSE, warning=FALSE}
+gbm_mod = train(
+  Salary ~ .,
+  data = hit_trn,
+  trControl = trainControl(method = "cv", number = 5),
+  method = "gbm",
+  tuneGrid = gbm_grid, 
+  verbose = FALSE
+)
+```
+
+```{r}
+rf_grid = expand.grid(mtry = 1:(ncol(hit_trn) - 1))
+rf_mod  = train(
+    Salary ~ .,
+    data = hit_trn,
+    trControl = trainControl(method = "oob"),
+    method = "rf",
+    tuneGrid = rf_grid)
+```
+
+```{r}
+bag_mod = train(
+    Salary ~ .,
+    data = hit_trn,
+    trControl = trainControl(method = "oob"),
+    method = "rf",
+    tuneGrid = data.frame(mtry = (ncol(hit_trn) - 1)))
+```
+
+```{r}
+models = list(gbm_mod, rf_mod, bag_mod)
+```
+
+```{r}
+rmse = function(actual, predicted) {
+  sqrt(mean((actual - predicted) ^ 2))
+}
+```
+
+```{r}
+get_rmse = function(model, data, response) {
+  rmse(actual = data[, response], 
+       predicted = predict(model, data))
+}
+```
+
+```{r}
+test_rmse = sapply(models, get_rmse, data = hit_tst, response = "Salary")
+```
+
+```{r}
+get_best_result = function(caret_fit) {
+  best = which(rownames(caret_fit$results) == rownames(caret_fit$bestTune))
+  best_result = caret_fit$results[best, ]
+  rownames(best_result) = NULL
+  best_result
+}
+```
+
+|    Model     |         Resampled RMSE            |     Test RMSE    | 
+|--------------|-----------------------------------|------------------|
+|  gbm_mod     | `r get_best_result(gbm_mod)$RMSE` | `r test_rmse[1]` |
+|  rf_mod      | `r get_best_result(rf_mod)$RMSE`  | `r test_rmse[2]` |
+|  bag_mod     | `r get_best_result(bag_mod)$RMSE` | `r test_rmse[3]` |
+
+## Exercise 3
+```{r}
+rf_log_mod  = train(
+    log(Salary) ~ .,
+    data = hit_trn,
+    trControl = trainControl(method = "oob"),
+    method = "rf")
+```
+
+```{r}
+trans_predicted=exp(predict(rf_log_mod, newdata = hit_tst))
+trans_rmse=rmse(actual = hit_tst$Salary,predicted = trans_predicted)
+```
+
+|    Model     |      Test RMSE    | 
+|--------------|-------------------|
+|  rf_mod      | `r test_rmse[2]`  |
+|  rf_log_mod  | `r trans_rmse`    |
+
+## Exercise 4
+
+### Timing
+```{r}
+rf_cv_time["elapsed"] / rf_oob_time["elapsed"]
+```
+
+(a) The speed-up for OOB is about four times that of 5-fold CV, instead of the five times that would have been expected.
+    There appears to be some additional overhead in using OOB.
+(b) The tuned values of mtry for both random forests tuned are 1. So they choose the same model.
+(c) Logistic: Performs the worst. This is expected as clearly a non-linear decision boundary is needed.
+    Single Tree: Better than logistic, but not the best seen here. We see above that this is not a very deep tree. It will
+                 have non-linear boundaries, but since it uses binary splits, they will be rectangular regions.
+    Random Forest: First note that both essentially fit the same model. (The exact forests will be different due to                            randomization.) By using many trees (500) the boundaries will become less rectangular than the single
+                   tree, and will better match the spiral data in the data.
+
+### Salary
+(d) 
+```{r}
+rf_mod$bestTune
+```
+(e)
+```{r}
+plot(gbm_mod)
+```
+
+(f)
+```{r}
+varImpPlot(rf_mod$finalModel, main = "Variable Importance, Random Forest")
+```
+
+(g)
+```{r}
+plot(varImp(gbm_mod), main = "Variable Importance, Boosting")
+```
+
+(h) According to the random forest, the three most important predictors are CRBI, CHits,CAtBat.
+(i) According to the boosted model, the three most important predictors are CRBI, Walks,CRuns.
+
+### Transformation
+(j) I think the transformation was unnecessary because the test RMSE did not change a lot.
